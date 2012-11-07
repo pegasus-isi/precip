@@ -1,0 +1,24 @@
+
+The following environment variables needs to be set for the
+tests to work. Note that you will have to provide your credentials.
+
+# amazon
+export AMAZON_EC2_ACCESS_KEY=
+export AMAZON_EC2_SECRET_KEY=
+
+# openstack on india
+export OPENSTACK_URL="http://149.165.146.50:8773/services/Cloud"
+export OPENSTACK_ACCESS_KEY=
+export OPENSTACK_SECRET_KEY=
+
+# eucalyptus on india
+export EUCALYPTUS_URL="http://149.165.146.135:8773/services/Eucalyptus"
+export EUCALYPTUS_ACCESS_KEY=
+export EUCALYPTUS_SECRET_KEY=
+
+# nimbus on hotel
+export NIMBUS_URL="http://svc.uc.futuregrid.org:8444"
+export NIMBUS_ACCESS_KEY=
+export NIMBUS_SECRET_KEY=
+
+

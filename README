@@ -1,0 +1,346 @@
+peccolo - Pegasus Experiment Cloud Controller
+
+Overview
+
+   Peccolo is a flexible exeperiment management API for setting up
+   experiments on top of clouds. Peccolo was developed for use on
+   FutureGrid, but the API is generic enough to work on OpenStack,
+   Eucalyptus, Nimbus and Amazon EC2. The API allows you to easily
+   provision resources, which you can then can run commands on and copy
+   files to/from. The goal of the API is to be flexible and simple to use
+   in your own Python scripts.
+
+   The API does not require any special images, which makes it easy to get
+   going. Any basic Linux image will work. More complex images can be used
+   if your experiment requires so, or you can use the experiment API to
+   run bootstrap scripts on the images to install/configure required
+   software.
+
+   A concept which simplfies interacting with the API is instance tagging.
+   When you start an instance, you can add arbitrary tags to it. The
+   instance also gets a set of default tags. API methods such as running a
+   remote command, or copying files, all use tags for specify which
+   instances you want to target.
+
+   Peccolo also handles ssh keys and security groups automatically. This
+   is done to make sure the experiment management is not interfering with
+   your existing cloud setup. The first time you use Peccolo, a directory
+   will be created called ~/.peccolo. Inside this directory, a ssh keypair
+   will be created and used for accessing instances. On clouds which
+   supports it, the keypair is automatically registered as 'peccolo', and
+   a 'peccolo' security group is created. If your experiement requires
+   more ports to be open you can use the cloud interface to add those
+   ports to the peccolo security group.
+
+   Peccolo is a fairly new API, and if you have questions or suggestions
+   for improvements, please contact pegasus-support@isi.edu
+
+Installation
+
+   Prerequisites are the Paramiko and Boto Python modules. The Python
+   source package and RPMs are available at:
+   [7]http://pegasus.isi.edu/static/peccolo/software/
+
+API
+
+   provision(image_id, instance_type='m1.small', count=1, tags=None)
+          Provision a new instance. Note that this method starts the
+          provisioning cycle, but does not block for the instance to
+          finish booting. For blocking on instance creation/booting, see
+          wait()
+
+          Parameters:
+
+          + image_id - the id of the image to instanciate
+          + instance_type - the type of instance. This is infrastructure
+            specific, but usually follows the Amazon EC2 model with
+            m1.small, m1.large, and so on.
+          + count - number of instances to create
+          + tags - these are used to manipulate the instance later. Use
+            this to create logical groups of your instances.
+
+   wait(tags=[], timeout=600)
+          Barrier for all instances matching the tags argument. This
+          method will block until the instances have finish booting and
+          are accessible via their external hostnames.
+
+          Parameters:
+
+          + tags - tags specifying the subset of instances to block on.
+            The default value is [] which means wait for all instances.
+
+          + timeout - timeout in seconds for the instances to boot. If the
+            timeout is reached, an ExperimentException is raised. The
+            default is 600 seconds.
+
+   deprovision(tags)
+          Deprovisions (terminates) instances matching the tags argument
+
+          Parameters:
+
+          + tags - tags specifying the subset of instances to deprovision.
+
+   list(tags)
+          Returns a list of details about the instances matching the tags.
+          The details include instance id, hostnames, and tags.
+
+          Parameters:
+
+          + tags - tags specifying the subset of instances to give
+            information on. If you want details on all current instances,
+            use [].
+
+          Returns:
+
+          + List of dictionaries, one for each instance.
+
+   get_public_hostnames(tags)
+          Provides a list of public hostnames for the instances matching
+          the tags. The public hostnames can be provided to other
+          instances in order to let the instances know about eachother.
+
+          Parameters:
+
+          + tags - tags specifying the subset of instances.
+
+          Returns:
+
+          + A list of public hostnames
+
+   get_private_hostnames(tags)
+          Provides a list of private hostnames for the instances matching
+          the tags. The private hostnames can be provided to other
+          instances in order to let the instances know about eachother.
+
+          Parameters:
+
+          + tags - tags specifying the subset of instances.
+
+          Returns:
+
+          + A list of private hostnames
+
+   get(tags, remote_path, local_path, user="root")
+          Transfers a file from a set of remote machines matching the
+          tags, and stores the file locally. If more than one instance
+          matches the tags, an instance id will be appended to the
+          local_path.
+
+          Parameters:
+
+          + tags - these are used to manipulate the instance later. Use
+            this to create logical groups of your instances.
+          + remote_path - the path of the file on the remote instance
+          + local_path - the local path to tranfer to
+          + user - remote user. If not specified, the default is 'root'
+
+   put(tags, local_path, remote_path, user="root")
+          Transfers a local file to a set of remote machines matching the
+          tags.
+
+          Parameters:
+
+          + tags - these are used to manipulate the instance later. Use
+            this to create logical groups of your instances.
+          + local_path - the local path to tranfer from
+          + remote_path - the path on the remote instance to store the
+            file as
+          + user - remote user. If not specified, the default is 'root'
+
+   run(tags, cmd, user="root", check_exit_code=True)
+          Runs a command on the instances matches the tags. The commands
+          are run in series, on one instance after the other.
+
+          Parameters:
+
+          + tags - these are used to manipulate the instance later. Use
+            this to create logical groups of your instances.
+          + cmd - the command to run
+          + user - remote user. If not specified, the default is 'root'.
+            If you need to run commands as another user, you will have to
+            make sure that user accepts the ssh key in ~/.peccolo/
+          + check_exit_code - If set to True (default), commands returning
+            non-zero exit codes will result in a ExperimentException being
+            raised.
+
+          Returns:
+
+          + A list of lists, containing exit_code[], stdout[] and stderr[]
+            for the commands run
+
+   copy_and_run(tags, local_script, args=[], user="root",
+          check_exit_code=True)
+          Copies a script from the local machine to the remote instances
+          and executes the script. The script is run in series, on one
+          instance after the other.
+
+          Parameters:
+
+          + tags - these are used to manipulate the instance later. Use
+            this to create logical groups of your instances.
+          + local_script - the local script to run
+          + args - arguments for the script
+          + user - remote user. If not specified, the default is 'root'.
+            If you need to run commands as another user, you will have to
+            make sure that user accepts the ssh key in ~/.peccolo/
+          + check_exit_code - If set to True (default), commands returning
+            non-zero exit codes will result in a ExperimentException being
+            raised.
+
+          Returns:
+
+          + A list of lists, containing exit_code[], stdout[] and stderr[]
+            for the commands run
+
+   The basic methods above are standard across all the Cloud
+   infrastructures. What is different is the constructors as each
+   infrastructure handles initialization a little bit different. For
+   example, to create a new OpenStack using the EC2_* environment provided
+   automatically by FutureGrid:
+
+    exp = OpenStackExperiment(
+            os.environ['EC2_URL'],
+            os.environ['EC2_ACCESS_KEY'],
+            os.environ['EC2_SECRET_KEY'])
+
+
+   i For Amazon EC2, you have to specify region, endpoint, and
+   access/secret keys. Note that it is not required to use environment
+   variables for your credentials, but seperating the crenditals from the
+   code prevents the credentials from being check in to source control
+   systems.
+
+    exp = EC2Experiment(
+            "us-west-2c",
+            "ec2.us-west-2.amazonaws.com",
+            os.environ['AMAZON_EC2_ACCESS_KEY'],
+            os.environ['AMAZON_EC2_SECRET_KEY'])
+
+
+Examples
+
+Hello World
+
+
+#!/usr/bin/python
+
+import os
+import time
+from pprint import pprint
+
+from peccolo import *
+
+exp = None
+
+# Use try/except liberally in your experiments - the api is set up to
+# raise ExperimentException on most errors
+try:
+
+    # Create a new OpenStack based experiment. In this case we pick
+    # up endpoints and access/secret cloud keys from the environment
+    # as exposing those is the common setup on FutureGrid
+    exp = OpenStackExperiment(
+            os.environ['EC2_URL'],
+            os.environ['EC2_ACCESS_KEY'],
+            os.environ['EC2_SECRET_KEY'])
+
+    # Provision an instance based on the ami-0000004c. Note that tags are
+    # used throughout the api to identify and manipulate instances. You
+    # can give an instance an arbitrary number of tags.
+    exp.provision("ami-0000004c", tags=["test1"], count=1)
+
+    # Wait for all instances to boot and become accessible. The provision
+    # method only starts the provisioning, and can be used to start a large
+    # number of instances at the same time. The wait method provides a
+    # barrier to when it is safe to start the actual experiment.
+    exp.wait()
+
+    # Print out the details of the instance. The details include instance id,
+    # private and public hostnames, and tags both defined by you and some
+    # added by the api
+    pprint(exp.list())
+
+    # Run a command on the instances having the "test1" tag. In this case we
+    # only have one instance, but if you had multiple instances with that
+    # tag, the command would run on each one.
+    exp.run(["test1"], "echo 'Hello world from a experiment instance'")
+
+except ExperimentException as e:
+    # This is the default exception for most errors in the api
+    print "ERROR: %s" % e
+
+finally:
+    # Be sure to always deprovision the instances we have started. Putting
+    # the deprovision call under finally: make the deprovisioning happening
+    # even in the case of failure.
+    if exp is not None:
+        exp.deprovision()
+
+
+Resources from mulitple infrastructures
+
+
+#!/usr/bin/python
+
+import os
+import time
+
+from peccolo import *
+
+ec2 = None
+fg = None
+
+try:
+
+    # This example show how to run an experiment between Amazon EC2
+    # and an OpenStack resource on FutureGrid. The setup is pretty
+    # similar to the HelloWorld example, except that we now have to
+    # experiment to handle. The first step is to get the experiments
+    # initialized. Note that it is not required to use environment
+    # variables for your credentials, but seperating the crenditals
+    # from the code prevents the credentials from being check in to
+    # source control systems.
+
+    ec2 = EC2Experiment(
+            "us-west-2c",
+            "ec2.us-west-2.amazonaws.com",
+            os.environ['AMAZON_EC2_ACCESS_KEY'],
+            os.environ['AMAZON_EC2_SECRET_KEY'])
+
+    fg = OpenStackExperiment(
+            os.environ['EC2_URL'],
+            os.environ['EC2_ACCESS_KEY'],
+            os.environ['EC2_SECRET_KEY'])
+
+    # Next we provision two instances, one on Amazon EC2 and one of
+    # FutureGrid
+    ec2.provision("ami-8a1e92ba", tags=["id=ec2_1"])
+    fg.provision("ami-0000004c", tags=["id=fg_1"])
+
+    # Wait for all instances to boot and become accessible. The provision
+    # method only starts the provisioning, and can be used to start a large
+    # number of instances at the same time. The wait method provides a
+    # barrier to when it is safe to start the actual experiment.
+    ec2.wait([])
+    fg.wait([])
+
+    # Run commands on the remote instances
+    ec2.run([], "echo 'Hello world Amazon EC2'")
+    fg.run([], "echo 'Hello world FutureGrid OpenStack'")
+
+except ExperimentException as e:
+    # This is the default exception for most errors in the api
+    print "ERROR: %s" % e
+    raise e
+finally:
+    # Be sure to always deprovision the instances we have started. Putting
+    # the deprovision call under finally: make the deprovisioning happening
+    # even in the case of failure.
+    if ec2 is not None:
+        ec2.deprovision([])
+    if fg is not None:
+        fg.deprovision([])
+
+References
+
+   7. http://pegasus.isi.edu/static/peccolo/software/
