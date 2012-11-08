@@ -6,7 +6,7 @@ import sys
 import time
 import traceback
 
-from peccolo import *
+from precip import *
 
 
 class TestNimbus(unittest.TestCase):

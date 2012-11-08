@@ -1,14 +1,15 @@
-peccolo - Pegasus Experiment Cloud Controller
+precip - Pegasus Repeatable Experiments for the Cloud in Python
 
 Overview
 
-   Peccolo is a flexible exeperiment management API for setting up
-   experiments on top of clouds. Peccolo was developed for use on
-   FutureGrid, but the API is generic enough to work on OpenStack,
-   Eucalyptus, Nimbus and Amazon EC2. The API allows you to easily
+   Precip is a flexible exeperiment management API for running experiments
+   on clouds. Precip was developed for use on FutureGrid infrastructures
+   such as OpenStack, Eucalyptus (>=3.2), Nimbus, and at the same time
+   commercial clouds such as Amazon EC2. The API allows you to easily
    provision resources, which you can then can run commands on and copy
-   files to/from. The goal of the API is to be flexible and simple to use
-   in your own Python scripts.
+   files to/from subsets of instances identified by tags. The goal of the
+   API is to be flexible and simple to use in Python scripts to control
+   your experiments.
 
    The API does not require any special images, which makes it easy to get
    going. Any basic Linux image will work. More complex images can be used
@@ -22,24 +23,24 @@ Overview
    remote command, or copying files, all use tags for specify which
    instances you want to target.
 
-   Peccolo also handles ssh keys and security groups automatically. This
-   is done to make sure the experiment management is not interfering with
-   your existing cloud setup. The first time you use Peccolo, a directory
-   will be created called ~/.peccolo. Inside this directory, a ssh keypair
+   Precip also handles ssh keys and security groups automatically. This is
+   done to make sure the experiment management is not interfering with
+   your existing cloud setup. The first time you use Precip, a directory
+   will be created called ~/.precip. Inside this directory, a ssh keypair
    will be created and used for accessing instances. On clouds which
-   supports it, the keypair is automatically registered as 'peccolo', and
-   a 'peccolo' security group is created. If your experiement requires
-   more ports to be open you can use the cloud interface to add those
-   ports to the peccolo security group.
+   supports it, the keypair is automatically registered as 'precip', and a
+   'precip' security group is created. If your experiement requires more
+   ports to be open you can use the cloud interface to add those ports to
+   the precip security group.
 
-   Peccolo is a fairly new API, and if you have questions or suggestions
+   Precip is a fairly new API, and if you have questions or suggestions
    for improvements, please contact pegasus-support@isi.edu
 
 Installation
 
    Prerequisites are the Paramiko and Boto Python modules. The Python
    source package and RPMs are available at:
-   [7]http://pegasus.isi.edu/static/peccolo/software/
+   http://pegasus.isi.edu/static/precip/software/
 
 API
 
@@ -158,7 +159,7 @@ API
           + cmd - the command to run
           + user - remote user. If not specified, the default is 'root'.
             If you need to run commands as another user, you will have to
-            make sure that user accepts the ssh key in ~/.peccolo/
+            make sure that user accepts the ssh key in ~/.precip/
           + check_exit_code - If set to True (default), commands returning
             non-zero exit codes will result in a ExperimentException being
             raised.
@@ -182,7 +183,7 @@ API
           + args - arguments for the script
           + user - remote user. If not specified, the default is 'root'.
             If you need to run commands as another user, you will have to
-            make sure that user accepts the ssh key in ~/.peccolo/
+            make sure that user accepts the ssh key in ~/.precip/
           + check_exit_code - If set to True (default), commands returning
             non-zero exit codes will result in a ExperimentException being
             raised.
@@ -228,7 +229,7 @@ import os
 import time
 from pprint import pprint
 
-from peccolo import *
+from precip import *
 
 exp = None
 
@@ -285,7 +286,7 @@ Resources from mulitple infrastructures
 import os
 import time
 
-from peccolo import *
+from precip import *
 
 ec2 = None
 fg = None
@@ -341,6 +342,3 @@ finally:
     if fg is not None:
         fg.deprovision([])
 
-References
-
-   7. http://pegasus.isi.edu/static/peccolo/software/

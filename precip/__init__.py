@@ -16,5 +16,5 @@ limitations under the License.
 
 """
 
-from peccolo.experiment import *
+from precip.experiment import *
 

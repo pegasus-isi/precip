@@ -1,18 +1,19 @@
 <?xml version='1.0'?>
 <!DOCTYPE article PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN" "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd">
-<article id="peccolo">
-    <title>peccolo - Pegasus Experiment Cloud Controller</title>
+<article id="precip">
+    <title>precip - Pegasus Repeatable Experiments for the Cloud in Python</title>
     <section>
         <title>Overview</title>
         <para>
-            Peccolo is a flexible exeperiment management API for setting
-            up experiments on top of clouds. Peccolo was developed for
-            use on FutureGrid, but the API is generic enough to work
-            on OpenStack, Eucalyptus, Nimbus and Amazon EC2. The API
-            allows you to easily provision resources, which you can then
-            can run commands on and copy files to/from. The goal of the
-            API is to be flexible and simple to use in your own Python
-            scripts.
+            Precip is a flexible exeperiment management API for running
+            experiments on clouds. Precip was developed for use on
+            FutureGrid infrastructures such as OpenStack, Eucalyptus
+            (>=3.2), Nimbus, and at the same time commercial clouds
+            such as Amazon EC2. The API allows you to easily provision
+            resources, which you can then can run commands on and copy
+            files to/from subsets of instances identified by tags. The
+            goal of the API is to be flexible and simple to use in
+            Python scripts to control your experiments.
         </para>
         <para>
             The API does not require any special images, which makes it
@@ -30,20 +31,20 @@
             you want to target.
         </para>
         <para>
-            Peccolo also handles ssh keys and security groups
+            Precip also handles ssh keys and security groups
             automatically. This is done to make sure the experiment
             management is not interfering with your existing cloud
-            setup. The first time you use Peccolo, a directory will be
-            created called ~/.peccolo. Inside this directory, a ssh
+            setup. The first time you use Precip, a directory will be
+            created called ~/.precip. Inside this directory, a ssh
             keypair will be created and used for accessing instances.
             On clouds which supports it, the keypair is automatically
-            registered as 'peccolo', and a 'peccolo' security group is
+            registered as 'precip', and a 'precip' security group is
             created. If your experiement requires more ports to be open
             you can use the cloud interface to add those ports to 
-            the peccolo security group.
+            the precip security group.
         </para>
         <para>
-            Peccolo is a fairly new API, and if you have questions or
+            Precip is a fairly new API, and if you have questions or
             suggestions for improvements, please contact
             pegasus-support@isi.edu
         </para>
@@ -52,7 +53,7 @@
         <title>Installation</title>
         <para>Prerequisites are the Paramiko and Boto Python modules. The Python source package
               and RPMs are available at:
-              <ulink url="http://pegasus.isi.edu/static/peccolo/software/">http://pegasus.isi.edu/static/peccolo/software/</ulink></para>
+              <ulink url="http://pegasus.isi.edu/static/precip/software/">http://pegasus.isi.edu/static/precip/software/</ulink></para>
     </section>
     <section>
         <title>API</title>
@@ -234,7 +235,7 @@
                         <listitem>
                             <para><emphasis role="bold">user</emphasis> - remote user. If not specified, the default is 'root'.
                                 If you need to run commands as another user, you will have to make sure that user accepts the ssh key
-                                in ~/.peccolo/</para>
+                                in ~/.precip/</para>
                         </listitem>
                         <listitem>
                             <para><emphasis role="bold">check_exit_code</emphasis> - If set to True (default), commands
@@ -270,7 +271,7 @@
                         <listitem>
                             <para><emphasis role="bold">user</emphasis> - remote user. If not specified, the default is 'root'.
                                 If you need to run commands as another user, you will have to make sure that user accepts the ssh key
-                                in ~/.peccolo/</para>
+                                in ~/.precip/</para>
                         </listitem>
                         <listitem>
                             <para><emphasis role="bold">check_exit_code</emphasis> - If set to True (default), commands
@@ -329,7 +330,7 @@ import os
 import time
 from pprint import pprint
 
-from peccolo import *
+from precip import *
 
 exp = None
 
@@ -388,7 +389,7 @@ finally:
 import os
 import time
 
-from peccolo import *
+from precip import *
 
 ec2 = None
 fg = None

@@ -39,7 +39,7 @@ __all__ = ["ExperimentException",
 
 logging.basicConfig(level=logging.WARN)
 
-logger = logging.getLogger('peccolo')
+logger = logging.getLogger('precip')
 logger.setLevel(level=logging.INFO)
 
 boto_logger = logging.getLogger('boto')
@@ -173,13 +173,13 @@ class Experiment:
     
     def __init__(self):
         """
-        Constructor for a new experiment - this will set up ~/.peccolo and ssh keys if they
+        Constructor for a new experiment - this will set up ~/.precip and ssh keys if they
         do not already exist
         """
         
         self._instances = []
         
-        self._conf_dir = os.path.join(os.environ["HOME"], ".peccolo")
+        self._conf_dir = os.path.join(os.environ["HOME"], ".precip")
         
         # checking/creating conf directory
         if not os.path.exists(self._conf_dir):
@@ -486,8 +486,8 @@ class EC2Experiment(Experiment):
         """
         keypairs = None
         try:
-            keypairs = self._conn.get_key_pair("peccolo")
-            # TODO: verify that the the existing keypair matches the one in ~/.peccolo
+            keypairs = self._conn.get_key_pair("precip")
+            # TODO: verify that the the existing keypair matches the one in ~/.precip
         except IndexError, ie:
             # not found on eucalyptus
             pass
@@ -498,11 +498,11 @@ class EC2Experiment(Experiment):
                 raise ExperimentException("Unable to query for key pair", e)
             
         if keypairs is None:
-            logger.info("Registering ssh pubkey as 'peccolo'")
+            logger.info("Registering ssh pubkey as 'precip'")
             f = open(self._ssh_pubkey)
             contents = f.read()
             f.close()
-            self._conn.import_key_pair("peccolo", contents)
+            self._conn.import_key_pair("precip", contents)
                   
     def _security_groups_setup(self):
         """
@@ -510,7 +510,7 @@ class EC2Experiment(Experiment):
         """
         sgroups = None
         try:
-            sgroups = self._conn.get_all_security_groups(["peccolo"])
+            sgroups = self._conn.get_all_security_groups(["precip"])
         except EC2ResponseError, e:
             if e.error_code in ["InvalidGroup.NotFound", "SecurityGroupNotFoundForProject"]:
                 sgroups = None
@@ -519,8 +519,8 @@ class EC2Experiment(Experiment):
         
         if sgroups is None:
             try:
-                logger.info("Registering default security group 'peccolo'")
-                sg = self._conn.create_security_group("peccolo", "FutureGrid Experiment Mangement default group")
+                logger.info("Registering default security group 'precip'")
+                sg = self._conn.create_security_group("precip", "FutureGrid Experiment Mangement default group")
                 sg.authorize(ip_protocol='tcp', from_port=22, to_port=22, cidr_ip='0.0.0.0/0')
                 sg.authorize(src_group=sg)
             except Exception:
@@ -607,9 +607,9 @@ class EC2Experiment(Experiment):
                 image_obj = self._conn.get_image(image_id)
 
                 if self._security_groups_support:
-                    res = image_obj.run(instance_type=instance_type, key_name="peccolo", security_groups=["peccolo"])
+                    res = image_obj.run(instance_type=instance_type, key_name="precip", security_groups=["precip"])
                 else:
-                    res = image_obj.run(instance_type=instance_type, key_name="peccolo")
+                    res = image_obj.run(instance_type=instance_type, key_name="precip")
                 logger.info("Started instance %s, type %s" % (res.instances[0].id, instance_type))        
             except Exception as e:
                 raise ExperimentException("Unable to provision a new instance", e)
@@ -618,7 +618,7 @@ class EC2Experiment(Experiment):
             instance.ec2_instance = res.instances[0]
             
             # add basic tags
-            instance.add_tag("peccolo")
+            instance.add_tag("precip")
             instance.add_tag(instance.id)
             for t in tags:
                 instance.add_tag(t)
