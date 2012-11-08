@@ -311,9 +311,20 @@ class Experiment:
         :param local_path: local location for where to store the file
         """
         ssh = SSHConnection()
+        iset = self._instance_subset(tags)
+        
+        # if the instance set is larger than one, enable the appending of 
+        # instance id to the local path
+        append_instance_id = True
+        if len(iset) == 1:
+            append_instance_id = False
+            
         for i in self._instance_subset(tags):
-            ssh.get(self._ssh_privkey, i.pub_addr, user, remote_path, local_path)
-            # FIXME: local file should get unique names
+            modified_local_path = local_path
+            if append_instance_id:
+                modified_local_path = local_path + "." + i.id
+            # should we do checks on the target path? Directory check? Existing file check?
+            ssh.get(self._ssh_privkey, i.pub_addr, user, remote_path, modified_local_path)
 
     def put(self, tags, local_path, remote_path, user="root"):
         """
