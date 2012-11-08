@@ -3,7 +3,7 @@
 import os
 import time
 
-from peccolo import *
+from precip import *
 
 ec2 = None
 fg = None

@@ -4,7 +4,7 @@ import os
 import time
 from pprint import pprint
 
-from peccolo import *
+from precip import *
 
 exp = None
 
