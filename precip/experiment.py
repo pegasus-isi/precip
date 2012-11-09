@@ -78,9 +78,9 @@ class SSHConnection:
         err = ""
         ssh = self._new_connection(privkey, host, user)
         chan = ssh.get_transport().open_session()
-        stdin = chan.makefile("wb")
-        stdout = chan.makefile("rb")
-        stderr = chan.makefile_stderr("rb")
+        stdin = chan.makefile("wb", -1)
+        stdout = chan.makefile("rb", -1)
+        stderr = chan.makefile_stderr("rb", -1)
         chan.exec_command(cmd)
         stdin.flush()
         exit_code = chan.recv_exit_status()

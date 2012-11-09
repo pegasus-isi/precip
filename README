@@ -40,7 +40,7 @@ Installation
 
    Prerequisites are the Paramiko and Boto Python modules. The Python
    source package and RPMs are available at:
-   http://pegasus.isi.edu/static/precip/software/
+   [8]http://pegasus.isi.edu/static/precip/software/
 
 API
 
@@ -341,4 +341,169 @@ finally:
         ec2.deprovision([])
     if fg is not None:
         fg.deprovision([])
+
+
+Setting up a Condor pool and run a Pegasus workflow
+
+   This is a more complex example in which a small Condor pool is set up
+   and then a Pegasus workflow is run and benchmarked. The Precip script
+   is similar to what we have seen before, but it has two groups of
+   instances, one master acting as the Condor central manager, and a set
+   of Condor worker nodes.
+
+#!/usr/bin/python
+
+import os
+import time
+
+from precip import *
+
+try:
+
+    # This experiment is targeted to run on OpenStack
+    exp = OpenStackExperiment(
+            os.environ['OPENSTACK_URL'],
+            os.environ['OPENSTACK_ACCESS_KEY'],
+            os.environ['OPENSTACK_SECRET_KEY'])
+
+    # We need a master Condor node and a set of workers
+    exp.provision("ami-0000004c", tags=["master"],
+                  instance_type="m1.large")
+    exp.provision("ami-0000004c", tags=["compute"],
+                  instance_type="m1.large", count=2)
+    exp.wait()
+
+    # The workers need to know what the private hostname of the master is
+    master_priv_addr = exp.get_private_hostnames(["master"])[0]
+
+    # Bootstrap the instances. This includes installing Condor and Pegasus,
+    # downloading and settup the workflow.
+    exp.copy_and_run(["master"], "./bootstrap.sh")
+    exp.copy_and_run(["compute"], "./bootstrap.sh", args=[master_priv_addr])
+
+    # Give the workers some time to register with the Condor central
+    # manager
+    time.sleep(60)
+
+    # Make sure Condor came up correctly
+    exp.run(["master"], "condor_status")
+
+    # Run the workflow
+    exp.run(["master"], "cd ~/montage && ./run-montage", user="wf")
+
+    # At this point, in a real experiment, you could for example provision
+    # more resources and run the workflow again, or run the workflow with
+    # different parameters/settings.
+
+except ExperimentException as e:
+    print "ERROR: %s" % e
+finally:
+    # always want to clean up all the instances we have started
+    exp.deprovision([])
+
+
+   We also need a bootstrap.sh which sets up the instances:
+
+#!/bin/bash
+
+# This script bootstraps a basic RHEL6 instance to be have working
+# Condor and Pegasus installs. The script takes one optional
+# argument which is the address of the master instance (central
+# manager in Condor terminology). If the argument is not given,
+# the script sets up the instance to be the master.
+
+MASTER_ADDR=$1
+
+# for images with condor already installed, stop condor
+/etc/init.d/condor stop >/dev/null 2>&1 || /bin/true
+
+# correct clock is important for most projects
+yum -q -y install ntpdate
+/etc/init.d/ntpdate start
+
+# Add the EPEL repository
+wget -nv http://mirror.utexas.edu/epel/6/x86_64/epel-release-6-7.noarch.rpm
+rpm -Uh epel-release-*.noarch.rpm
+
+# Add the Condor repository
+cat >/etc/yum.repos.d/condor.repo <<EOF
+[condor-stable]
+name=Condor Stable RPM Repository for Redhat Enterprise Linux 6
+baseurl=http://www.cs.wisc.edu/condor/yum/stable/rhel6
+enabled=1
+gpgcheck=0
+EOF
+
+# Add the Pegasus repository
+cat >/etc/yum.repos.d/pegasus.repo <<EOF
+[Pegasus]
+name=Pegasus
+baseurl=http://download.pegasus.isi.edu/wms/download/rhel/6/x86_64
+gpgcheck=0
+enabled=1
+priority=50
+EOF
+
+# Install required software
+yum -q -y clean all
+yum -q -y install gcc gcc-g++ gcc-gfortran make gawk bison diffutils \
+                  java-1.7.0-openjdk.x86_64 \
+                  java-1.7.0-openjdk-devel.x86_64 \
+                  ganglia-gmond condor pegasus
+
+# Clear the Condor local config file - we use config.d instead
+cat /dev/null >/etc/condor/condor_config.local
+
+# Common Condor config between master and workers
+cat >/etc/condor/config.d/50-main.conf <<EOF
+
+CONDOR_HOST = $MASTER_ADDR
+
+FILESYSTEM_DOMAIN = \$(FULL_HOSTNAME)
+TRUST_UID_DOMAIN = True
+
+DAEMON_LIST = MASTER, STARTD
+
+# security
+ALLOW_WRITE = 10.*
+ALLOW_READ = \$(ALLOW_WRITE)
+
+# default policy
+START = True
+SUSPEND = False
+CONTINUE = True
+PREEMPT = False
+KILL = False
+
+EOF
+
+# Master gets extra packages/configs
+if [ "x$MASTER_ADDR" = "x" ]; then
+    yum -q -y install ganglia-gmetad ganglia-web
+
+    cat >/etc/condor/config.d/90-master.conf <<EOF
+CONDOR_HOST = \$(FULL_HOSTNAME)
+DAEMON_LIST = MASTER, COLLECTOR, NEGOTIATOR, SCHEDD
+EOF
+fi
+
+# Restarting daemons
+/etc/init.d/condor start
+
+# User to run the workflows as, and allow the experiment management
+# ssh key to authenticate
+adduser wf
+mkdir -p ~wf/.ssh
+cp ~/.ssh/authorized_keys ~wf/.ssh/
+chown -R wf: ~wf/.ssh
+
+# Master is the submit host, so deploy our workflow on it
+if [ "x$MASTER_ADDR" = "x" ]; then
+    # install the workflow tarball and wait script
+    cd ~wf
+    wget -q http://pegasus.isi.edu/static/precip/wf-experiment/montage.tar.gz
+    tar xzf montage.tar.gz
+    chown -R wf: montage*
+fi
+
 
