@@ -1,3 +1,4 @@
+#!/usr/bin/python2.7 -tt
 """
 
 Copyright 2012 University Of Southern California
@@ -23,6 +24,7 @@ import re
 import socket
 import subprocess
 import time
+import uuid
 
 import paramiko
 
@@ -37,11 +39,23 @@ __all__ = ["ExperimentException",
            "EucalyptusExperiment",
            "OpenStackExperiment"]
 
-logging.basicConfig(level=logging.WARN)
 
+#logging.basicConfig(level=logging.WARN)
 logger = logging.getLogger('precip')
-logger.setLevel(level=logging.INFO)
 
+# log to the console
+console = logging.StreamHandler()
+
+# default log level - make logger/console match
+logger.setLevel(logging.INFO)
+console.setLevel(logging.INFO)
+
+# formatter
+formatter = logging.Formatter("%(asctime)s %(levelname)7s:  %(message)s", "%Y-%m-%d %H:%M:%S")
+console.setFormatter(formatter)
+logger.addHandler(console)
+
+# make boto log less
 boto_logger = logging.getLogger('boto')
 boto_logger.setLevel(level=logging.FATAL)
 
@@ -174,22 +188,25 @@ class Experiment:
     def __init__(self):
         """
         Constructor for a new experiment - this will set up ~/.precip and ssh keys if they
-        do not already exist
+        do not already exist in a way that you can use precip from multiple machines or 
+        accounts at the same time. 
         """
         
         self._instances = []
         
         self._conf_dir = os.path.join(os.environ["HOME"], ".precip")
+        uid = self._get_account_id()
         
         # checking/creating conf directory
         if not os.path.exists(self._conf_dir):
             os.makedirs(self._conf_dir)
         
         # ssh keys setup 
-        self._ssh_pubkey = os.path.join(self._conf_dir, "id_rsa.pub")
-        self._ssh_privkey = os.path.join(self._conf_dir, "id_rsa")
+        self._ssh_pubkey = os.path.join(self._conf_dir, "precip_"+uid+".pub")
+        self._ssh_privkey = os.path.join(self._conf_dir, "precip_"+uid)
         if not os.path.exists(self._ssh_privkey):
             logger.info("Creating new ssh key in " + self._conf_dir)
+            logger.info("You don't need to enter a passphrase, just leave it blank and press enter!")
             cmd = "ssh-keygen -q -t rsa -f " + self._ssh_privkey + " </dev/null"
             p = subprocess.Popen(cmd, shell=True)
             stdoutdata, stderrdata = p.communicate()
@@ -236,6 +253,27 @@ class Experiment:
         except socket.error:
             return False
         return True
+    
+    def _get_account_id(self):
+        
+        """
+        Checks if account_id with uid stored in it exists.
+        Returns the uid for this machine.
+        """
+        
+        self._account_id = os.path.join(self._conf_dir, "account_id")
+        
+        if not os.path.exists(self._account_id):
+            f = open(self._account_id,'w')
+            uid = str(uuid.uuid4().get_hex())
+            f.write(uid)
+            f.close()
+            
+        else:
+            f = open(self._account_id, 'r')
+            uid = f.read()
+            f.close()
+        return uid   
         
     def provision(self, image_id, instance_type='m1.small', count=1, tags=None):
         """
@@ -250,12 +288,13 @@ class Experiment:
         """                                                                   
         pass
     
-    def wait(self, tags=[], timeput=600):
+    def wait(self, tags=[], timeput=300, maxretrycount=3):
         """
         Barrier for all currently instances to finish booting and be accessible via external addresses.
         
         :param tags: set of tags to match against
         :param timeout: maximum timeout to wait for instances to come up
+        :param maxretrycount: The number of retries in case of failure of provisioning the instances 
         """
         return True
 
@@ -395,6 +434,9 @@ class Experiment:
 
 
 class EC2Experiment(Experiment):
+    
+    _image_id = None
+    _instance_type = None
      
     def __init__(self, region, endpoint, access_key, secret_key):
         """
@@ -478,16 +520,19 @@ class EC2Experiment(Experiment):
             self._conn.get_all_instances()
         except EC2ResponseError, e:
             self.ec2_conn = None
-            raise ExperimentException("Unable to talk to the service", e)
+            raise ExperimentException("Unable to talk to the service", e) 
              
     def _ssh_keys_setup(self):
+        
         """
-        Makes sure we have our experiment keypair registered
+   Makes sure we have our experiment keypair registered
         """
+        uid = self._get_account_id()
         keypairs = None
         try:
-            keypairs = self._conn.get_key_pair("precip")
-            # TODO: verify that the the existing keypair matches the one in ~/.precip
+            keypairs = self._conn.get_key_pair("precip_"+uid)
+
+            # TODO: verify that the existing keypair matches the one in ~/.precip
         except IndexError, ie:
             # not found on eucalyptus
             pass
@@ -496,14 +541,16 @@ class EC2Experiment(Experiment):
                 keypairs = None
             else:
                 raise ExperimentException("Unable to query for key pair", e)
-            
+  
+         
         if keypairs is None:
-            logger.info("Registering ssh pubkey as 'precip'")
+            logger.info("Registering ssh pubkey as 'precip_"+uid+"'")
             f = open(self._ssh_pubkey)
             contents = f.read()
             f.close()
-            self._conn.import_key_pair("precip", contents)
-                  
+            self._conn.import_key_pair("precip_"+uid, contents) 
+              
+                   
     def _security_groups_setup(self):
         """
         Sets up the default security group
@@ -544,7 +591,10 @@ class EC2Experiment(Experiment):
         ec2inst.update()
         
         if ec2inst.state != "pending" and ec2inst.state != "running":
-            raise ExperimentException("Unexpected instance state for instance %s: %s" % (instance.id, ec2inst.state))
+            
+            #raise ExperimentException("Unexpected instance state for instance %s: %s" % (instance.id, ec2inst.state))
+            logger.debug("Unexpected instance state for instance %s: %s" % (instance.id, ec2inst.state))
+            return False             
         
         if ec2inst.state == "pending":
             logger.debug("Instance %s is still pending" % instance.id)
@@ -569,6 +619,8 @@ class EC2Experiment(Experiment):
             exit_code, out, err = ssh.run(self._ssh_privkey, ec2inst.public_dns_name, "root", "chmod 755 /root/vm-bootstrap.sh && /root/vm-bootstrap.sh")
         except paramiko.SSHException:
             logger.debug("Failed to run bootstrap script on instance %s. Will retry later." % instance.id)
+            logger.debug("Out: " + out)
+            logger.debug("Err: " + err)
             return False
         except socket.error:
             logger.debug("Unable to ssh connect to instance %s. Will retry later." % instance.id)
@@ -586,6 +638,50 @@ class EC2Experiment(Experiment):
         instance.add_tag(instance.pub_addr)
         instance.is_fully_instanciated = True
         return True
+    
+    def _retry(self, instance, image_id, instance_type, tags):
+        
+        """
+        In case of reaching timeout for an instance, retry will terminate the previous instance and 
+        replace it with a new instance.
+        
+        :param instance: the instance to terminate and replace with a new one
+        :param image_id: The image id as specified by the cloud infrastructure
+        :param instance_type: The instance type (m1.small, m1.large, ...)
+        :param tags: Tags to add to the new instance - this is important as tags are used throughout the API 
+                     to find and manipulate instances
+        """
+        
+        uid = self._get_account_id()
+        self._get_connection()
+        
+        logger.info("Instance %s has reached timeout, and will be replaced with a new instance" % instance.id)
+        try:
+            self._conn.terminate_instances(instance_ids=[instance.id])
+        except AttributeError as e:
+            logger.warn("Terminating issued an attribute warning")
+        self._instances.remove(instance)
+
+        try:
+            image_obj = self._conn.get_image(image_id)    
+            if self._security_groups_support:
+                res = image_obj.run(instance_type=instance_type, key_name="precip_"+uid, security_groups=["precip"])
+            else:
+                res = image_obj.run(instance_type=instance_type, key_name="precip_"+uid)
+            logger.info("Started a new instance %s, type %s" % (res.instances[0].id, instance_type))
+        except Exception as e:
+            raise ExperimentException("Unable to provision a new instance", e)
+                
+        instance = Instance(res.instances[0].id)
+        instance.ec2_instance = res.instances[0]
+            
+        instance.add_tag("precip")
+        instance.add_tag(instance.id)
+        for t in tags:
+            instance.add_tag(t)
+            
+        self._instances.append(instance)
+
             
     def provision(self, image_id, instance_type='m1.small', count=1, tags=None):                                                                   
         """
@@ -599,6 +695,10 @@ class EC2Experiment(Experiment):
                      to find and manipulate instances
         """   
         
+        uid = self._get_account_id()
+        self._instance_type = instance_type
+        self._image_id = image_id
+        
         self._get_connection()
                
         for i in range(count):
@@ -607,9 +707,9 @@ class EC2Experiment(Experiment):
                 image_obj = self._conn.get_image(image_id)
 
                 if self._security_groups_support:
-                    res = image_obj.run(instance_type=instance_type, key_name="precip", security_groups=["precip"])
+                    res = image_obj.run(instance_type=instance_type, key_name="precip_"+uid, security_groups=["precip"])
                 else:
-                    res = image_obj.run(instance_type=instance_type, key_name="precip")
+                    res = image_obj.run(instance_type=instance_type, key_name="precip_"+uid)
                 logger.info("Started instance %s, type %s" % (res.instances[0].id, instance_type))        
             except Exception as e:
                 raise ExperimentException("Unable to provision a new instance", e)
@@ -625,26 +725,41 @@ class EC2Experiment(Experiment):
             
             self._instances.append(instance)
         
-    def wait(self, tags=[], timeout=600):
+    def wait(self, tags=[], timeout=300, maxretrycount=3):
         """
         Barrier for all currently instances to finish booting and be accessible via external addresses.
         
         :param tags: set of tags to match against
         :param timeout: maximum timeout to wait for instances to come up
+        :param maxretrycount: The number of retries in case of failure of provisioning the instances 
         """
+        retrycount = maxretrycount
+        imageID = self._image_id
+        instanceType = self._instance_type
+        
         start_time = int(time.time())
         count_pending = -1
         while count_pending != 0:
             count_pending = 0
+            pending_set = []
             for i in self._instance_subset(tags):
                 if not self._finish_instanciation(i):
                     count_pending += 1
+                    pending_set.append(i)
             if count_pending > 0:
                 current_time = int(time.time())
                 if start_time + timeout < current_time:
-                    raise ExperimentException("Timeout reached while waiting for instances to boot")
+                    logger.info("Timeout reached while waiting for instances to boot")
+                    if retrycount > 1:
+                        for j in pending_set:
+                            self._retry(j, imageID, instanceType, tags)
+                        retrycount -= 1
+                        start_time = int(time.time())
+                    else:
+                        raise ExperimentException("Timeout reached while waiting for instances to boot")
                 logger.info("Waiting for %d instances to finish booting" % (count_pending))
-                time.sleep(60)    
+                time.sleep(30)       
+    
             
     def deprovision(self, tags=[]):
         """
@@ -655,7 +770,10 @@ class EC2Experiment(Experiment):
         self._get_connection()
         for i in self._instance_subset(tags):
             logger.info("Deprovisioning instance: %s" % i.id)
-            self._conn.terminate_instances(instance_ids=[i.id])
+            try:
+                self._conn.terminate_instances(instance_ids=[i.id])
+            except AttributeError as e:
+                logger.warn("Deprovisioning issued an attribute warning")
             self._instances.remove(i)
 
 
