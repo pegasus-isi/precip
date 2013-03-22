@@ -26,12 +26,14 @@ Overview
    Precip also handles ssh keys and security groups automatically. This is
    done to make sure the experiment management is not interfering with
    your existing cloud setup. The first time you use Precip, a directory
-   will be created called ~/.precip. Inside this directory, a ssh keypair
-   will be created and used for accessing instances. On clouds which
-   supports it, the keypair is automatically registered as 'precip', and a
-   'precip' security group is created. If your experiement requires more
-   ports to be open you can use the cloud interface to add those ports to
-   the precip security group.
+   will be created called ~/.precip. Inside this directory, an unique
+   account id is stored for each machine along with a ssh keypair and this
+   keypair is used for accessing instances from multiple machines or
+   accounts at the same time. On clouds which supports it, the keypair is
+   automatically registered as 'precip_id', and a 'precip' security group
+   is created. If your experiement requires more ports to be open you can
+   use the cloud interface to add those ports to the precip security
+   group.
 
    Precip is a fairly new API, and if you have questions or suggestions
    for improvements, please contact pegasus-support@isi.edu
@@ -40,7 +42,7 @@ Installation
 
    Prerequisites are the Paramiko and Boto Python modules. The Python
    source package and RPMs are available at:
-   [8]http://pegasus.isi.edu/static/precip/software/
+   http://pegasus.isi.edu/static/precip/software/
 
 API
 
@@ -60,7 +62,7 @@ API
           + tags - these are used to manipulate the instance later. Use
             this to create logical groups of your instances.
 
-   wait(tags=[], timeout=600)
+   wait(tags=[], timeout=600, maxretrycount=3)
           Barrier for all instances matching the tags argument. This
           method will block until the instances have finish booting and
           are accessible via their external hostnames.
@@ -73,6 +75,12 @@ API
           + timeout - timeout in seconds for the instances to boot. If the
             timeout is reached, an ExperimentException is raised. The
             default is 600 seconds.
+
+          + maxretrycount -specifies number of terminating instances in
+            case of failure of provisioning and starting new instances
+            instead. The default value is 3 which means if an instance
+            fails and doesn't start it will retry starting new instance
+            instead 3 times after each timeout'.
 
    deprovision(tags)
           Deprovisions (terminates) instances matching the tags argument
