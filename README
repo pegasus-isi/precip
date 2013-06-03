@@ -1,5 +1,6 @@
 precip - Pegasus Repeatable Experiments for the Cloud in Python
 
+
 Overview
 
    Precip is a flexible exeperiment management API for running experiments
@@ -46,7 +47,8 @@ Installation
 
 API
 
-   provision(image_id, instance_type='m1.small', count=1, tags=None)
+   provision(image_id, instance_type='m1.small', count=1, ebs_size=None,
+          tags=None)
           Provision a new instance. Note that this method starts the
           provisioning cycle, but does not block for the instance to
           finish booting. For blocking on instance creation/booting, see
@@ -59,6 +61,8 @@ API
             specific, but usually follows the Amazon EC2 model with
             m1.small, m1.large, and so on.
           + count - number of instances to create
+          + ebs_size - the size in GB if you want to grow the root
+            filesystem EBS disk
           + tags - these are used to manipulate the instance later. Use
             this to create logical groups of your instances.
 
@@ -156,7 +160,8 @@ API
             file as
           + user - remote user. If not specified, the default is 'root'
 
-   run(tags, cmd, user="root", check_exit_code=True)
+   run(tags, cmd, user="root", check_exit_code=True,
+          output_base_name=None)
           Runs a command on the instances matches the tags. The commands
           are run in series, on one instance after the other.
 
@@ -171,6 +176,10 @@ API
           + check_exit_code - If set to True (default), commands returning
             non-zero exit codes will result in a ExperimentException being
             raised.
+          + output_base_name - By default, the stdout and stderr of the
+            remote command is looked in the PRECIP stdout log. Giving a
+            base filename (.out and .err will be appended automatically)
+            will redirect the stdout and stderr to files instead.
 
           Returns:
 
@@ -513,5 +522,4 @@ if [ "x$MASTER_ADDR" = "x" ]; then
     tar xzf montage.tar.gz
     chown -R wf: montage*
 fi
-
 

@@ -7,7 +7,7 @@ def read(fname):
 
 setup(
     name = "precip",
-    version = "0.2",
+    version = "0.3",
     author = "Mats Rynge",
     author_email = "rynge@isi.edu",
     description = ("Pegasus Experiment Cloud Controller - a simple module for running experiments in the cloud"),

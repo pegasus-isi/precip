@@ -61,7 +61,7 @@
         <title>API</title>
         <variablelist>
             <varlistentry>
-                <term><emphasis role="bold">provision(image_id, instance_type='m1.small', count=1, tags=None)</emphasis></term>
+                <term><emphasis role="bold">provision(image_id, instance_type='m1.small', count=1, ebs_size=None, tags=None)</emphasis></term>
                 <listitem>
                     <para>Provision a new instance. Note that this method starts the provisioning cycle, but does not
                         block for the instance to finish booting. For blocking on instance creation/booting, see wait()</para>
@@ -76,6 +76,9 @@
                         </listitem>
                         <listitem>
                             <para><emphasis role="bold">count</emphasis> - number of instances to create</para>
+                        </listitem>
+                        <listitem>
+                            <para><emphasis role="bold">ebs_size</emphasis> - the size in GB if you want to grow the root filesystem EBS disk</para>
                         </listitem>
                         <listitem>
                             <para><emphasis role="bold">tags</emphasis> - these are used to manipulate the instance later.
@@ -227,7 +230,7 @@
                 </listitem>
             </varlistentry>
             <varlistentry>
-                <term><emphasis role="bold">run(tags, cmd, user="root", check_exit_code=True)</emphasis></term>
+                <term><emphasis role="bold">run(tags, cmd, user="root", check_exit_code=True, output_base_name=None)</emphasis></term>
                 <listitem>
                     <para>Runs a command on the instances matches the tags. The commands are run in series, on one instance after
                          the other.</para>
@@ -248,6 +251,13 @@
                         <listitem>
                             <para><emphasis role="bold">check_exit_code</emphasis> - If set to True (default), commands
                                returning non-zero exit codes will result in a ExperimentException being raised.
+                                </para>
+                        </listitem>
+                        <listitem>
+                            <para><emphasis role="bold">output_base_name</emphasis> - By default, the stdout and
+                                stderr of the remote command is looked in the PRECIP stdout log. Giving a base
+                                filename (.out and .err will be appended automatically) will redirect the stdout
+                                and stderr to files instead.
                                 </para>
                         </listitem>
                     </itemizedlist>

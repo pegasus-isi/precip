@@ -195,11 +195,12 @@ class Experiment:
         self._instances = []
         
         self._conf_dir = os.path.join(os.environ["HOME"], ".precip")
-        uid = self._get_account_id()
         
         # checking/creating conf directory
         if not os.path.exists(self._conf_dir):
             os.makedirs(self._conf_dir)
+        
+        uid = self._get_account_id()
         
         # ssh keys setup 
         self._ssh_pubkey = os.path.join(self._conf_dir, "precip_"+uid+".pub")
@@ -378,13 +379,15 @@ class Experiment:
         for i in self._instance_subset(tags):
             ssh.put(self._ssh_privkey, i.pub_addr, user, local_path, remote_path)
     
-    def run(self, tags, cmd, user="root", check_exit_code=True):
+    def run(self, tags, cmd, user="root", check_exit_code=True, output_base_name=None):
         """
         Runs a command on set of instances matching the tags given.
         
         :param tags: set of tags to match against
         :param cmd: command to run
         :param user: the user to run the command as
+        :param check_exit_code: if true, non-zero exit codes will be considered fatal
+        :param output_base_name: redirects output to a file instead of stdout
         """
         exit_code_list = []
         out_list = []
@@ -399,10 +402,30 @@ class Experiment:
                 exit_code, out, err = ssh.run(self._ssh_privkey, i.pub_addr, user, cmd)
             except Exception, e:
                 raise ExperimentException("Error running ssh command", e)
+
             if len(out) > 0:
-                logger.info("  stdout: %s" % out)
+                if output_base_name is not None:
+                    fname = "%s.%s.stdout" %(output_base_name, i.id)
+                    try:
+                        f = open(fname, 'w')
+                        f.write(out)
+                        f.close()
+                    except Exception, e:
+                        raise ExperimentException("Unable to write to " + fname, e)
+                else:
+                    logger.info("  stdout: %s" % out)
+
             if len(err) > 0:
-                logger.info("  stderr: %s" % err)
+                if output_base_name is not None:
+                    fname = "%s.%s.stderr" %(output_base_name, i.id)
+                    try:
+                        f = open(fname, 'w')
+                        f.write(err)
+                        f.close()
+                    except Exception, e:
+                        raise ExperimentException("Unable to write to " + fname, e)
+                else:
+                    logger.info("  stderr: %s" % err)
             
             exit_code_list.append(exit_code)
             out_list.append(out)
@@ -525,7 +548,7 @@ class EC2Experiment(Experiment):
     def _ssh_keys_setup(self):
         
         """
-   Makes sure we have our experiment keypair registered
+        Makes sure we have our experiment keypair registered
         """
         uid = self._get_account_id()
         keypairs = None
@@ -634,6 +657,20 @@ class EC2Experiment(Experiment):
             raise ExperimentException("Bootstrap script exited with error %d" % exit_code)
         
         logger.info("Instance %s has booted, public hostname: %s" % (instance.id, ec2inst.public_dns_name))
+
+        # add our tags
+        try:
+            ec2inst.add_tag("Name", "PRECIP Experiment")
+            # can only add 10 on EC2
+            tag_count = 1
+            for t in instance.tags:
+                if tag_count >= 10:
+                    break
+                ec2inst.add_tag(t, "1")
+                tag_count += 1
+        except Exception, e:
+            # ignore - the infrastructure might not support user tags
+            pass
         
         instance.add_tag(instance.pub_addr)
         instance.is_fully_instanciated = True
@@ -683,7 +720,7 @@ class EC2Experiment(Experiment):
         self._instances.append(instance)
 
             
-    def provision(self, image_id, instance_type='m1.small', count=1, tags=None):                                                                   
+    def provision(self, image_id, instance_type='m1.small', count=1, ebs_size=None, tags=None):
         """
         Provision a new instance. Note that this method starts the provisioning cycle, but does not
         block for the instance to finish booting - for that, see wait()
@@ -703,13 +740,26 @@ class EC2Experiment(Experiment):
                
         for i in range(count):
             try:
+                # block device maps is only needed if the user wants to specify ebs_size
+                block_device_map = None
+                if ebs_size is not None:
+                    dev_sda1 = boto.ec2.blockdevicemapping.EBSBlockDeviceType()
+                    dev_sda1.size = int(ebs_size)
+                    block_device_map = boto.ec2.blockdevicemapping.BlockDeviceMapping()
+                    block_device_map['/dev/sda1'] = dev_sda1
+
                 # create a boto image object from the image id
                 image_obj = self._conn.get_image(image_id)
 
                 if self._security_groups_support:
-                    res = image_obj.run(instance_type=instance_type, key_name="precip_"+uid, security_groups=["precip"])
+                    res = image_obj.run(instance_type = instance_type,
+                                        key_name = "precip_"+uid,
+                                        block_device_map = block_device_map,
+                                        security_groups = ["precip"])
                 else:
-                    res = image_obj.run(instance_type=instance_type, key_name="precip_"+uid)
+                    res = image_obj.run(instance_type = instance_type,
+                                        key_name = "precip_"+uid,
+                                        block_device_map = block_device_map)
                 logger.info("Started instance %s, type %s" % (res.instances[0].id, instance_type))        
             except Exception as e:
                 raise ExperimentException("Unable to provision a new instance", e)
