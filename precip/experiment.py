@@ -185,13 +185,18 @@ class Experiment:
     Base class for all types of cloud implementations. This is what defines the experiment API.
     """
     
-    def __init__(self):
+    def __init__(self, name = None):
         """
         Constructor for a new experiment - this will set up ~/.precip and ssh keys if they
         do not already exist in a way that you can use precip from multiple machines or 
         accounts at the same time. 
         """
         
+        if name is None:
+            self._name = str(int(time.time()))
+        else:
+            self._name = name
+
         self._instances = []
         
         self._conf_dir = os.path.join(os.environ["HOME"], ".precip")
@@ -276,7 +281,7 @@ class Experiment:
             f.close()
         return uid   
         
-    def provision(self, image_id, instance_type='m1.small', count=1, tags=None):
+    def provision(self, image_id, instance_type='m1.small', count=1, tags=None, boot_timeout=300, boot_max_tries=3):
         """
         Provision a new instance. Note that this method starts the provisioning cycle, but does not
         block for the instance to finish booting - for that, see wait()
@@ -286,10 +291,12 @@ class Experiment:
         :param count: Number of instances to provision. The default is 1.
         :param tags: Tags to add to the instance - this is important as tags are used throughout the API 
                      to find and manipulate instances
+        :param boot_timeout: The amount of allowed time in seconds for an instance to boot
+        :param boot_max_tries: The number of tries an instance is given to successfully boot
         """                                                                   
         pass
     
-    def wait(self, tags=[], timeput=300, maxretrycount=3):
+    def wait(self, tags=[]):
         """
         Barrier for all currently instances to finish booting and be accessible via external addresses.
         
@@ -458,10 +465,7 @@ class Experiment:
 
 class EC2Experiment(Experiment):
     
-    _image_id = None
-    _instance_type = None
-     
-    def __init__(self, region, endpoint, access_key, secret_key):
+    def __init__(self, region, endpoint, access_key, secret_key, name = None):
         """
         Initializes an EC2 experiment
         
@@ -470,7 +474,7 @@ class EC2Experiment(Experiment):
         :param access_keys: Amazon EC2 access key
         :param secret_keys: Amazon EC2 secret key
         """        
-        Experiment.__init__(self)
+        Experiment.__init__(self, name = name)
     
         self._region = region
         self._endpoint = endpoint
@@ -573,7 +577,6 @@ class EC2Experiment(Experiment):
             f.close()
             self._conn.import_key_pair("precip_"+uid, contents) 
               
-                   
     def _security_groups_setup(self):
         """
         Sets up the default security group
@@ -597,7 +600,48 @@ class EC2Experiment(Experiment):
                 logger.warn("Security group seems to be broken - disabling support")
                 self._security_groups_support = False
                 pass
-    
+
+    def _start_instance(self, image_id, instance_type, ebs_size):
+        """
+        Creates a new instance
+        
+        :param instance: the instance to check
+        :return: the instance Boto object
+        """
+        uid = self._get_account_id()
+        boto_instance = None
+        try:
+            # block device maps is only needed if the user wants to specify ebs_size
+            block_device_map = None
+            if ebs_size is not None:
+                dev_sda1 = boto.ec2.blockdevicemapping.EBSBlockDeviceType(delete_on_termination = True)
+                dev_sda1.size = int(ebs_size)
+                block_device_map = boto.ec2.blockdevicemapping.BlockDeviceMapping()
+                block_device_map['/dev/sda1'] = dev_sda1
+            #else:
+            #    block_device_map = self._conn.get_image_attribute(image_id, 
+            #                                                      attribute = 'blockDeviceMapping')
+
+            # create a boto image object from the image id
+            image_obj = self._conn.get_image(image_id)
+
+            if self._security_groups_support:
+                res = image_obj.run(instance_type = instance_type,
+                                    key_name = "precip_"+uid,
+                                    instance_initiated_shutdown_behavior = "terminate",
+                                    block_device_map = block_device_map,
+                                    security_groups = ["precip"])
+            else:
+                res = image_obj.run(instance_type = instance_type,
+                                    key_name = "precip_"+uid,
+                                    instance_initiated_shutdown_behavior = "terminate",
+                                    block_device_map = block_device_map)
+            boto_instance = res.instances[0]
+            logger.info("Started instance %s, type %s" % (boto_instance.id, instance_type))        
+        except Exception as e:
+            raise ExperimentException("Unable to provision a new instance", e)
+        return res.instances[0]
+
     def _finish_instanciation(self, instance):
         """
         Finishes booting and bootstraps an instace
@@ -660,7 +704,7 @@ class EC2Experiment(Experiment):
 
         # add our tags
         try:
-            ec2inst.add_tag("Name", "PRECIP Experiment")
+            ec2inst.add_tag("Name", "PRECIP - " + self._name)
             # can only add 10 on EC2
             tag_count = 1
             for t in instance.tags:
@@ -675,8 +719,8 @@ class EC2Experiment(Experiment):
         instance.add_tag(instance.pub_addr)
         instance.is_fully_instanciated = True
         return True
-    
-    def _retry(self, instance, image_id, instance_type, tags):
+
+    def _retry(self, instance):
         
         """
         In case of reaching timeout for an instance, retry will terminate the previous instance and 
@@ -697,30 +741,15 @@ class EC2Experiment(Experiment):
             self._conn.terminate_instances(instance_ids=[instance.id])
         except AttributeError as e:
             logger.warn("Terminating issued an attribute warning")
-        self._instances.remove(instance)
 
-        try:
-            image_obj = self._conn.get_image(image_id)    
-            if self._security_groups_support:
-                res = image_obj.run(instance_type=instance_type, key_name="precip_"+uid, security_groups=["precip"])
-            else:
-                res = image_obj.run(instance_type=instance_type, key_name="precip_"+uid)
-            logger.info("Started a new instance %s, type %s" % (res.instances[0].id, instance_type))
-        except Exception as e:
-            raise ExperimentException("Unable to provision a new instance", e)
-                
-        instance = Instance(res.instances[0].id)
-        instance.ec2_instance = res.instances[0]
-            
-        instance.add_tag("precip")
-        instance.add_tag(instance.id)
-        for t in tags:
-            instance.add_tag(t)
-            
-        self._instances.append(instance)
+        boto_inst = self._start_instance(instance.image_id, instance.instance_type, instance.ebs_size)
+        instance.ec2_instance = boto_inst
+        instance.num_starts = instance.num_starts + 1
+        instance.boot_time = int(time.time())
 
             
-    def provision(self, image_id, instance_type='m1.small', count=1, ebs_size=None, tags=None):
+    def provision(self, image_id, instance_type='m1.small', count=1, ebs_size=None, tags=None,
+                  boot_timeout=300, boot_max_tries=3):
         """
         Provision a new instance. Note that this method starts the provisioning cycle, but does not
         block for the instance to finish booting - for that, see wait()
@@ -730,42 +759,27 @@ class EC2Experiment(Experiment):
         :param count: Number of instances to provision. The default is 1.
         :param tags: Tags to add to the instance - this is important as tags are used throughout the API 
                      to find and manipulate instances
+        :param boot_timeout: The amount of allowed time in seconds for an instance to boot
+        :param boot_max_tries: The number of tries an instance is given to successfully boot
         """   
         
         uid = self._get_account_id()
-        self._instance_type = instance_type
-        self._image_id = image_id
         
         self._get_connection()
                
         for i in range(count):
-            try:
-                # block device maps is only needed if the user wants to specify ebs_size
-                block_device_map = None
-                if ebs_size is not None:
-                    dev_sda1 = boto.ec2.blockdevicemapping.EBSBlockDeviceType()
-                    dev_sda1.size = int(ebs_size)
-                    block_device_map = boto.ec2.blockdevicemapping.BlockDeviceMapping()
-                    block_device_map['/dev/sda1'] = dev_sda1
+            boto_inst = self._start_instance(image_id, instance_type, ebs_size)
 
-                # create a boto image object from the image id
-                image_obj = self._conn.get_image(image_id)
+            instance = Instance(boto_inst.id)
+            instance.ec2_instance = boto_inst
 
-                if self._security_groups_support:
-                    res = image_obj.run(instance_type = instance_type,
-                                        key_name = "precip_"+uid,
-                                        block_device_map = block_device_map,
-                                        security_groups = ["precip"])
-                else:
-                    res = image_obj.run(instance_type = instance_type,
-                                        key_name = "precip_"+uid,
-                                        block_device_map = block_device_map)
-                logger.info("Started instance %s, type %s" % (res.instances[0].id, instance_type))        
-            except Exception as e:
-                raise ExperimentException("Unable to provision a new instance", e)
-        
-            instance = Instance(res.instances[0].id)
-            instance.ec2_instance = res.instances[0]
+            # keep track of parameters - we might need them for restarts later
+            instance.num_starts = 1
+            instance.boot_time = int(time.time())
+            instance.boot_timeout = boot_timeout
+            instance.boot_max_tries = 3
+            instance.instance_type = instance_type
+            instance.ebs_size = ebs_size
             
             # add basic tags
             instance.add_tag("precip")
@@ -774,8 +788,8 @@ class EC2Experiment(Experiment):
                 instance.add_tag(t)
             
             self._instances.append(instance)
-        
-    def wait(self, tags=[], timeout=300, maxretrycount=3):
+
+    def wait(self, tags=[]):
         """
         Barrier for all currently instances to finish booting and be accessible via external addresses.
         
@@ -783,33 +797,27 @@ class EC2Experiment(Experiment):
         :param timeout: maximum timeout to wait for instances to come up
         :param maxretrycount: The number of retries in case of failure of provisioning the instances 
         """
-        retrycount = maxretrycount
-        imageID = self._image_id
-        instanceType = self._instance_type
         
-        start_time = int(time.time())
         count_pending = -1
         while count_pending != 0:
             count_pending = 0
-            pending_set = []
+            current_time = int(time.time())
+
             for i in self._instance_subset(tags):
                 if not self._finish_instanciation(i):
                     count_pending += 1
-                    pending_set.append(i)
-            if count_pending > 0:
-                current_time = int(time.time())
-                if start_time + timeout < current_time:
+
+                # did the instance timeout?
+                if current_time > i.boot_time + i.boot_timeout:
                     logger.info("Timeout reached while waiting for instances to boot")
-                    if retrycount > 1:
-                        for j in pending_set:
-                            self._retry(j, imageID, instanceType, tags)
-                        retrycount -= 1
-                        start_time = int(time.time())
+                    if i.num_starts < i.boot_max_tries:
+                        self._retry(j)
                     else:
                         raise ExperimentException("Timeout reached while waiting for instances to boot")
-                logger.info("Waiting for %d instances to finish booting" % (count_pending))
+
+            if count_pending > 0:
+                logger.info("Still waiting for %d instances to finish booting" % (count_pending))
                 time.sleep(30)       
-    
             
     def deprovision(self, tags=[]):
         """
@@ -832,7 +840,7 @@ class OpenStackExperiment(EC2Experiment):
     A class defining an experiment running on top of OpenStack
     """
     
-    def __init__(self, endpoint, access_key, secret_key):
+    def __init__(self, endpoint, access_key, secret_key, name = None):
         """
         Initializes an OpenStack experiment
         
@@ -848,7 +856,7 @@ class EucalyptusExperiment(EC2Experiment):
     A class defining an experiment running on top of Eucalyptus
     """
     
-    def __init__(self, endpoint, access_key, secret_key):
+    def __init__(self, endpoint, access_key, secret_key, name = None):
         """
         Initializes an Eucalyptus experiment
         
@@ -864,7 +872,7 @@ class NimbusExperiment(EC2Experiment):
     A class defining an experiment running on top of Nimbus
     """
     
-    def __init__(self, endpoint, access_key, secret_key):
+    def __init__(self, endpoint, access_key, secret_key, name = None):
         """
         Initializes a Nimbus experiment
         
