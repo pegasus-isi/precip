@@ -78,7 +78,9 @@ class SSHConnection:
         hkeys = ssh.get_host_keys()
         hkeys.clear()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(host, username=user, key_filename=privkey, allow_agent=False, look_for_keys=False )
+        ssh.connect(host, username=user, key_filename=privkey, allow_agent=False, look_for_keys=False)
+        transport = ssh.get_transport()
+        transport.set_keepalive(30)
         return ssh
     
     def run(self, privkey, host, user, cmd):
@@ -219,6 +221,12 @@ class Experiment:
             rc = p.returncode
             if rc != 0:
                 raise ExperimentException("Command '%s' failed with error code %s" % (cmd, rc))
+
+    def __del__(self):
+        """
+        Deprovision all instances
+        """
+        self.deprovision([])
 
     def _instance_subset(self, tags):
         """
@@ -564,7 +572,7 @@ class EC2Experiment(Experiment):
             # not found on eucalyptus
             pass
         except EC2ResponseError, e:
-            if e.error_code in ["InvalidKeyPair.NotFound", "EC2APIError"]:
+            if e.error_code in ["InvalidKeyPair.NotFound", "KeypairNotFound", "EC2APIError"]:
                 keypairs = None
             else:
                 raise ExperimentException("Unable to query for key pair", e)
@@ -624,6 +632,8 @@ class EC2Experiment(Experiment):
 
             # create a boto image object from the image id
             image_obj = self._conn.get_image(image_id)
+            if image_obj is None:
+                raise ExperimentException("Image %s does not exist" %(image_id))
 
             if self._security_groups_support:
                 res = image_obj.run(instance_type = instance_type,
@@ -637,6 +647,7 @@ class EC2Experiment(Experiment):
                                     instance_initiated_shutdown_behavior = "terminate",
                                     block_device_map = block_device_map)
             boto_instance = res.instances[0]
+
             logger.info("Started instance %s, type %s" % (boto_instance.id, instance_type))        
         except Exception as e:
             raise ExperimentException("Unable to provision a new instance", e)
@@ -665,6 +676,15 @@ class EC2Experiment(Experiment):
         
         if ec2inst.state == "pending":
             logger.debug("Instance %s is still pending" % instance.id)
+            return False
+         
+        if ec2inst.public_dns_name == ec2inst.private_dns_name:
+            # we did not get a public address assigned to us, do it now
+            logger.debug("Requesting a public IP address")
+            addr = self._conn.allocate_address()
+            #self._conn.associate_address(instance_id = instance.id, public_ip = addr)
+            logger.debug("Got public ip: %s" %(addr))
+            ec2inst.use_ip(addr)
             return False
     
         if not self._is_valid_hostaddr(ec2inst.public_dns_name):
@@ -743,6 +763,7 @@ class EC2Experiment(Experiment):
             logger.warn("Terminating issued an attribute warning")
 
         boto_inst = self._start_instance(instance.image_id, instance.instance_type, instance.ebs_size)
+        instance.id = boto_inst.id
         instance.ec2_instance = boto_inst
         instance.num_starts = instance.num_starts + 1
         instance.boot_time = int(time.time())
@@ -778,6 +799,7 @@ class EC2Experiment(Experiment):
             instance.boot_time = int(time.time())
             instance.boot_timeout = boot_timeout
             instance.boot_max_tries = 3
+            instance.image_id = image_id
             instance.instance_type = instance_type
             instance.ebs_size = ebs_size
             
@@ -811,7 +833,7 @@ class EC2Experiment(Experiment):
                 if current_time > i.boot_time + i.boot_timeout:
                     logger.info("Timeout reached while waiting for instances to boot")
                     if i.num_starts < i.boot_max_tries:
-                        self._retry(j)
+                        self._retry(i)
                     else:
                         raise ExperimentException("Timeout reached while waiting for instances to boot")
 
