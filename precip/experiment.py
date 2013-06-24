@@ -829,13 +829,13 @@ class EC2Experiment(Experiment):
                 if not self._finish_instanciation(i):
                     count_pending += 1
 
-                # did the instance timeout?
-                if current_time > i.boot_time + i.boot_timeout:
-                    logger.info("Timeout reached while waiting for instances to boot")
-                    if i.num_starts < i.boot_max_tries:
-                        self._retry(i)
-                    else:
-                        raise ExperimentException("Timeout reached while waiting for instances to boot")
+                    # did the instance timeout?
+                    if current_time > i.boot_time + i.boot_timeout:
+                        logger.info("Timeout reached while waiting for instances to boot")
+                        if i.num_starts < i.boot_max_tries:
+                            self._retry(i)
+                        else:
+                            raise ExperimentException("Timeout reached while waiting for instances to boot")
 
             if count_pending > 0:
                 logger.info("Still waiting for %d instances to finish booting" % (count_pending))
