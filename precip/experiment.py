@@ -678,14 +678,14 @@ class EC2Experiment(Experiment):
             logger.debug("Instance %s is still pending" % instance.id)
             return False
          
-        if ec2inst.public_dns_name == ec2inst.private_dns_name:
-            # we did not get a public address assigned to us, do it now
-            logger.debug("Requesting a public IP address")
-            addr = self._conn.allocate_address()
-            #self._conn.associate_address(instance_id = instance.id, public_ip = addr)
-            logger.debug("Got public ip: %s" %(addr))
-            ec2inst.use_ip(addr)
-            return False
+        #if ec2inst.public_dns_name == ec2inst.private_dns_name:
+        #    # we did not get a public address assigned to us, do it now
+        #    logger.debug("Requesting a public IP address")
+        #    addr = self._conn.allocate_address()
+        #    #self._conn.associate_address(instance_id = instance.id, public_ip = addr)
+        #    logger.debug("Got public ip: %s" %(addr))
+        #    ec2inst.use_ip(addr)
+        #    return False
     
         if not self._is_valid_hostaddr(ec2inst.public_dns_name):
             logger.debug("Waiting for instance %s to boot and be assigned a public IP address" % instance.id)
