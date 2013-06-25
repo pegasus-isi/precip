@@ -761,6 +761,8 @@ class EC2Experiment(Experiment):
             self._conn.terminate_instances(instance_ids=[instance.id])
         except AttributeError as e:
             logger.warn("Terminating issued an attribute warning")
+        except Exception as e:
+            logger.warn("Ignoring error while terminating instance", e)
 
         boto_inst = self._start_instance(instance.image_id, instance.instance_type, instance.ebs_size)
         instance.id = boto_inst.id
