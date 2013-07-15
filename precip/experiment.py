@@ -512,7 +512,7 @@ class EC2Experiment(Experiment):
         if not r:
             raise ExperimentException("Unable to parse endpoint: %s" % (self._endpoint))
 
-        # Parse successfu
+        # Parse successful
         proto = r.group(2)
         host = r.group(3)
         port = r.group(4)
@@ -630,7 +630,7 @@ class EC2Experiment(Experiment):
             #    block_device_map = self._conn.get_image_attribute(image_id, 
             #                                                      attribute = 'blockDeviceMapping')
 
-            # create a boto image object from the image id
+            # create a boto image object from the image id          
             image_obj = self._conn.get_image(image_id)
             if image_obj is None:
                 raise ExperimentException("Image %s does not exist" %(image_id))
@@ -660,6 +660,8 @@ class EC2Experiment(Experiment):
         :param instance: the instance to check
         :return: True if the instance is ready, otherwise False
         """
+        instance_record = []
+        count_ing = 0
         # check if we are already done
         if instance.is_fully_instanciated:
             return True
@@ -667,6 +669,11 @@ class EC2Experiment(Experiment):
         # now, let's wait until the instance i up and running        
         ec2inst = instance.ec2_instance
         ec2inst.update()
+        
+        if ec2inst.state == "error":
+            logger.debug("Instance %s state is 'error - scheduling for possible retry" %instance.id)
+            instance.boot_timeout = 0
+            return False
         
         if ec2inst.state != "pending" and ec2inst.state != "running":
             
