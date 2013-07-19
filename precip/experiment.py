@@ -289,7 +289,7 @@ class Experiment:
             f.close()
         return uid   
         
-    def provision(self, image_id, instance_type='m1.small', count=1, tags=None, boot_timeout=300, boot_max_tries=3):
+    def provision(self, image_id, instance_type='m1.small', count=1, tags=None, boot_timeout=600, boot_max_tries=3):
         """
         Provision a new instance. Note that this method starts the provisioning cycle, but does not
         block for the instance to finish booting - for that, see wait()
@@ -779,7 +779,7 @@ class EC2Experiment(Experiment):
 
             
     def provision(self, image_id, instance_type='m1.small', count=1, ebs_size=None, tags=None,
-                  boot_timeout=300, boot_max_tries=3):
+                  boot_timeout=600, boot_max_tries=3):
         """
         Provision a new instance. Note that this method starts the provisioning cycle, but does not
         block for the instance to finish booting - for that, see wait()

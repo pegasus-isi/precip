@@ -9,7 +9,7 @@ index.html: *.xml
              >index.html
 
 readme.txt: index.html
-	  lynx -dump index.html >readme.txt
+	  lynx -dump index.html >../README
 
 clean:
 	  rm -rf *.html *.fo *.pdf

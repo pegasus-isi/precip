@@ -62,7 +62,7 @@
         <title>API</title>
         <variablelist>
             <varlistentry>
-                <term><emphasis role="bold">provision(image_id, instance_type='m1.small', count=1, ebs_size=None, tags=None)</emphasis></term>
+                <term><emphasis role="bold">provision(image_id, instance_type='m1.small', count=1, ebs_size=None, tags=None, boot_timeout=600, boot_max_tries=3)</emphasis></term>
                 <listitem>
                     <para>Provision a new instance. Note that this method starts the provisioning cycle, but does not
                         block for the instance to finish booting. For blocking on instance creation/booting, see wait()</para>
@@ -89,7 +89,7 @@
                             <para><emphasis role="bold">boot_timeout</emphasis> - timeout in seconds for the instances
                                 to boot. If the timeout is reached and the instance has been restarted less than boot_max_tries, 
                                 the instance will be restarted. If the number of retries have been exhausted, an 
-                                ExperimentException is raised. The default is 300 seconds.</para>
+                                ExperimentException is raised. The default is 600 seconds.</para>
                         </listitem>
                         <listitem>
                             <para><emphasis role="bold">boot_max_tries</emphasis> - the number of times booting an instance is allowed

@@ -1,6 +1,5 @@
 precip - Pegasus Repeatable Experiments for the Cloud in Python
 
-
 Overview
 
    Precip is a flexible exeperiment management API for running experiments
@@ -48,7 +47,7 @@ Installation
 API
 
    provision(image_id, instance_type='m1.small', count=1, ebs_size=None,
-          tags=None)
+          tags=None, boot_timeout=600, boot_max_tries=3)
           Provision a new instance. Note that this method starts the
           provisioning cycle, but does not block for the instance to
           finish booting. For blocking on instance creation/booting, see
@@ -65,8 +64,15 @@ API
             filesystem EBS disk
           + tags - these are used to manipulate the instance later. Use
             this to create logical groups of your instances.
+          + boot_timeout - timeout in seconds for the instances to boot.
+            If the timeout is reached and the instance has been restarted
+            less than boot_max_tries, the instance will be restarted. If
+            the number of retries have been exhausted, an
+            ExperimentException is raised. The default is 600 seconds.
+          + boot_max_tries - the number of times booting an instance is
+            allowed to be retried. The default value is 3.
 
-   wait(tags=[], timeout=600, maxretrycount=3)
+   wait(tags=[])
           Barrier for all instances matching the tags argument. This
           method will block until the instances have finish booting and
           are accessible via their external hostnames.
@@ -75,16 +81,6 @@ API
 
           + tags - tags specifying the subset of instances to block on.
             The default value is [] which means wait for all instances.
-
-          + timeout - timeout in seconds for the instances to boot. If the
-            timeout is reached, an ExperimentException is raised. The
-            default is 600 seconds.
-
-          + maxretrycount -specifies number of terminating instances in
-            case of failure of provisioning and starting new instances
-            instead. The default value is 3 which means if an instance
-            fails and doesn't start it will retry starting new instance
-            instead 3 times after each timeout'.
 
    deprovision(tags)
           Deprovisions (terminates) instances matching the tags argument
