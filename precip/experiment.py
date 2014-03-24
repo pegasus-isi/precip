@@ -684,15 +684,27 @@ class EC2Experiment(Experiment):
         if ec2inst.state == "pending":
             logger.debug("Instance %s is still pending" % instance.id)
             return False
-         
-        #if ec2inst.public_dns_name == ec2inst.private_dns_name:
-        #    # we did not get a public address assigned to us, do it now
-        #    logger.debug("Requesting a public IP address")
-        #    addr = self._conn.allocate_address()
-        #    #self._conn.associate_address(instance_id = instance.id, public_ip = addr)
-        #    logger.debug("Got public ip: %s" %(addr))
-        #    ec2inst.use_ip(addr)
-        #    return False
+        
+        if ec2inst.public_dns_name is None or \
+           ec2inst.public_dns_name == "" or \
+           ec2inst.public_dns_name.startswith('10.'):
+            # we did not get a public address assigned to us, do it now
+
+            # first check if we have unused floating ips laying around
+            addr_to_use = None
+            addresses = self._conn.get_all_addresses()
+            for address in addresses:
+                if address.instance_id is None or address.instance_id == "":
+                    addr_to_use = address.public_ip
+                    break
+
+            if not addr_to_use:
+                logger.debug("Requesting a new public IP address")
+                addr_to_use = self._conn.allocate_address()
+
+            logger.debug("Setting public ip: %s" %(addr_to_use))
+            ec2inst.use_ip(addr_to_use)
+            return False
     
         if not self._is_valid_hostaddr(ec2inst.public_dns_name):
             logger.debug("Waiting for instance %s to boot and be assigned a public IP address" % instance.id)
@@ -707,6 +719,7 @@ class EC2Experiment(Experiment):
         out = ""
         err = ""
         try:
+            logger.debug("Will try to ssh to " + ec2inst.public_dns_name)
             ssh = SSHConnection()
             script_path = os.path.dirname(os.path.abspath(__file__)) + "/resources/vm-bootstrap.sh"
             ssh.put(self._ssh_privkey, ec2inst.public_dns_name, "root", script_path, "/root/vm-bootstrap.sh")
@@ -820,6 +833,7 @@ class EC2Experiment(Experiment):
             
             self._instances.append(instance)
 
+
     def wait(self, tags=[]):
         """
         Barrier for all currently instances to finish booting and be accessible via external addresses.
@@ -849,7 +863,8 @@ class EC2Experiment(Experiment):
             if count_pending > 0:
                 logger.info("Still waiting for %d instances to finish booting" % (count_pending))
                 time.sleep(30)       
-            
+        
+
     def deprovision(self, tags=[]):
         """
         Deprovisions (terminates) instances with the matching tags
