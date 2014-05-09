@@ -729,6 +729,9 @@ class EC2Experiment(Experiment):
             logger.debug("Out: " + out)
             logger.debug("Err: " + err)
             return False
+        except paramiko.SFTPError:
+            logger.debug("Unable to ssh connect to instance %s. Will retry later." % instance.id)
+            return False
         except socket.error:
             logger.debug("Unable to ssh connect to instance %s. Will retry later." % instance.id)
             return False
@@ -792,7 +795,7 @@ class EC2Experiment(Experiment):
 
             
     def provision(self, image_id, instance_type='m1.small', count=1, ebs_size=None, tags=None,
-                  boot_timeout=600, boot_max_tries=3):
+                  boot_timeout=900, boot_max_tries=3):
         """
         Provision a new instance. Note that this method starts the provisioning cycle, but does not
         block for the instance to finish booting - for that, see wait()
@@ -855,6 +858,10 @@ class EC2Experiment(Experiment):
                     # did the instance timeout?
                     if current_time > i.boot_time + i.boot_timeout:
                         logger.info("Timeout reached while waiting for instances to boot")
+                        logger.info("A common cause for this that your image does not allow the" + \
+                                    " root user to login.")
+                        logger.info("Another common cause is infrastructure problems, preventing" + \
+                                    " the instance from booting correctly.")
                         if i.num_starts < i.boot_max_tries:
                             self._retry(i)
                         else:
